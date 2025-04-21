@@ -1,15 +1,19 @@
+import datetime
+
 def extract_memory(memory_items, threshold=0.7):
     values = []
+    if not isinstance(memory_items, list):
+        return values
     for item in memory_items:
         if isinstance(item, dict):
             if item.get("score", 0) >= threshold and "value" in item:
                 values.append(item["value"])
         elif isinstance(item, str):
-            values.append(item)  # fallback für alte Daten
+            values.append(item)
     return values
 
 def extract_relevant_quotes(user_memory, message):
-    raw_quotes = user_memory.get("quotes", [])
+    raw_quotes = user_memory.get("quotes") or []
     quotes = extract_memory(raw_quotes)
     if any(keyword in message.lower() for keyword in ["nochmal", "gesagt", "zitat", "wie war das"]):
         return quotes[-2:] if len(quotes) >= 2 else quotes
@@ -17,11 +21,11 @@ def extract_relevant_quotes(user_memory, message):
 
 def build_prompt_with_memory(user_memory, chosen_quote=None):
     name = user_memory.get("username", "der User")
-    facts = extract_memory(user_memory.get("facts", []))
-    likes = extract_memory(user_memory.get("likes", []))
-    traits = extract_memory(user_memory.get("traits", []))
-    jobs = extract_memory(user_memory.get("jobs", []))
-    quotes = extract_memory(user_memory.get("quotes", []))
+    facts = extract_memory(user_memory.get("facts") or [])
+    likes = extract_memory(user_memory.get("likes") or [])
+    traits = extract_memory(user_memory.get("traits") or [])
+    jobs = extract_memory(user_memory.get("jobs") or [])
+    quotes = extract_memory(user_memory.get("quotes") or [])
 
     memory_context = f"""
 🧠 Bekannte Infos über den User:

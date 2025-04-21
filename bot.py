@@ -3,6 +3,7 @@ import os
 import time
 from dotenv import load_dotenv
 from openai import OpenAI
+import random
 
 from logic.prompts import build_prompt_with_memory
 from logic.triggers import has_trigger
@@ -60,27 +61,39 @@ async def on_message(message):
 
     if lowered.startswith("ich liebe") or lowered.startswith("ich mag"):
         like = lowered.split("ich liebe")[-1].strip() if "ich liebe" in lowered else lowered.split("ich mag")[-1].strip()
-        save_user_memory(user_id, username, like=like)
+        if len(like.split()) > 1:
+            save_user_memory(user_id, username, like=like)
 
     if "ich hasse" in lowered:
-        fact = f"hasst: {lowered.split('ich hasse')[-1].strip()}"
-        save_user_memory(user_id, username, fact=fact)
+        hass = lowered.split("ich hasse")[-1].strip()
+        if len(hass.split()) > 1:
+            fact = f"hasst: {hass}"
+            save_user_memory(user_id, username, fact=fact)
 
     if "ich arbeite" in lowered:
         job = lowered.split("ich arbeite")[-1].strip()
-        save_user_memory(user_id, username, job=job)
+        if len(job.split()) > 1:
+            save_user_memory(user_id, username, job=job)
 
     if "ich bin" in lowered:
         trait = lowered.split("ich bin")[-1].strip()
-        save_user_memory(user_id, username, trait=trait)
+        if len(trait.split()) > 1:
+            save_user_memory(user_id, username, trait=trait)
 
-    if lowered.startswith("ich ") and len(content.split()) > 3:
+    if lowered.startswith("ich ") and len(content.split()) > 3 and not any(word in lowered for word in ["liebe", "mag", "hasse", "arbeite", "bin"]):
         quote = content.strip()
         save_user_memory(user_id, username, quote=quote)
 
     try:
         user_memory = get_user_memory(user_id)
-        prompt = build_prompt_with_memory(user_memory)
+
+        if user_memory.get("quotes"):
+            quotes = [q["value"] for q in user_memory["quotes"] if q.get("score", 0) >= 0.7]
+            chosen_quote = random.choice(quotes) if quotes else None
+        else:
+            chosen_quote = None
+
+        prompt = build_prompt_with_memory(user_memory, chosen_quote=chosen_quote)
         similar = query_similar_messages(user_id, content)
 
         messages = [{"role": "system", "content": prompt}]

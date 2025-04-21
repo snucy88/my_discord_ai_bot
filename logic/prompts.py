@@ -8,6 +8,13 @@ def extract_memory(memory_items, threshold=0.7):
             values.append(item)  # fallback für alte Daten
     return values
 
+def extract_relevant_quotes(user_memory, message):
+    raw_quotes = user_memory.get("quotes", [])
+    quotes = extract_memory(raw_quotes)
+    if any(keyword in message.lower() for keyword in ["nochmal", "gesagt", "zitat", "wie war das"]):
+        return quotes[-2:] if len(quotes) >= 2 else quotes
+    return []
+
 def build_prompt_with_memory(user_memory, chosen_quote=None):
     name = user_memory.get("username", "der User")
     facts = extract_memory(user_memory.get("facts", []))

@@ -87,11 +87,10 @@ async def on_message(message):
     try:
         user_memory = get_user_memory(user_id)
 
-        if user_memory.get("quotes"):
-            quotes = [q["value"] for q in user_memory["quotes"] if q.get("score", 0) >= 0.7]
-            chosen_quote = random.choice(quotes) if quotes else None
-        else:
-            chosen_quote = None
+        # MemoryReview mit Fehlerbehandlung bei Strings
+        quotes_raw = user_memory.get("quotes", [])
+        quotes = [q["value"] for q in quotes_raw if isinstance(q, dict) and q.get("score", 0) >= 0.7]
+        chosen_quote = random.choice(quotes) if quotes else None
 
         prompt = build_prompt_with_memory(user_memory, chosen_quote=chosen_quote)
         similar = query_similar_messages(user_id, content)

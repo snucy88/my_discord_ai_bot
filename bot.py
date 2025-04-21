@@ -3,7 +3,6 @@ import os
 import time
 from dotenv import load_dotenv
 from openai import OpenAI
-import random
 
 from logic.prompts import build_prompt_with_memory
 from logic.triggers import has_trigger
@@ -61,42 +60,31 @@ async def on_message(message):
 
     if lowered.startswith("ich liebe") or lowered.startswith("ich mag"):
         like = lowered.split("ich liebe")[-1].strip() if "ich liebe" in lowered else lowered.split("ich mag")[-1].strip()
-        if len(like.split()) > 1:
-            save_user_memory(user_id, username, like=like)
+        save_user_memory(user_id, username, like=like)
 
     if "ich hasse" in lowered:
-        hass = lowered.split("ich hasse")[-1].strip()
-        if len(hass.split()) > 1:
-            fact = f"hasst: {hass}"
-            save_user_memory(user_id, username, fact=fact)
+        fact = f"hasst: {lowered.split('ich hasse')[-1].strip()}"
+        save_user_memory(user_id, username, fact=fact)
 
     if "ich arbeite" in lowered:
         job = lowered.split("ich arbeite")[-1].strip()
-        if len(job.split()) > 1:
-            save_user_memory(user_id, username, job=job)
+        save_user_memory(user_id, username, job=job)
 
     if "ich bin" in lowered:
         trait = lowered.split("ich bin")[-1].strip()
-        if len(trait.split()) > 1:
-            save_user_memory(user_id, username, trait=trait)
+        save_user_memory(user_id, username, trait=trait)
 
-    if lowered.startswith("ich ") and len(content.split()) > 3 and not any(word in lowered for word in ["liebe", "mag", "hasse", "arbeite", "bin"]):
+    if lowered.startswith("ich ") and len(content.split()) > 3:
         quote = content.strip()
         save_user_memory(user_id, username, quote=quote)
 
     try:
-        user_memory = get_user_memory(user_id)
-
-        # MemoryReview mit Fehlerbehandlung bei Strings
-        quotes_raw = user_memory.get("quotes", [])
-        quotes = [q["value"] for q in quotes_raw if isinstance(q, dict) and q.get("score", 0) >= 0.7]
-        chosen_quote = random.choice(quotes) if quotes else None
-
-        prompt = build_prompt_with_memory(user_memory, chosen_quote=chosen_quote)
-        similar = query_similar_messages(user_id, content)
+        user_memory = get_user_memory(user_id) or {}
+        prompt = build_prompt_with_memory(user_memory)
+        similar = query_similar_messages(user_id, content) or []
 
         messages = [{"role": "system", "content": prompt}]
-        messages += [{"role": "user", "content": m["message"]} for m in similar]
+        messages += [{"role": "user", "content": m.get("message", "")} for m in similar if m]
         messages.append({"role": "user", "content": content})
 
         response = openai_client.chat.completions.create(

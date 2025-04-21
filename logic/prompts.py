@@ -1,9 +1,13 @@
+def extract_memory(memory_items, threshold=0.7):
+    """Filtert Memory-Elemente nach Relevanz-Score"""
+    return [item["value"] for item in memory_items if item.get("score", 0) >= threshold]
+
 def build_prompt_with_memory(user_memory):
-    # 🧩 Dynamic Memory Integration
-    facts = ', '.join(user_memory.get("facts", [])) or "nichts bekannt"
-    likes = ', '.join(user_memory.get("likes", [])) or "nichts"
-    jobs = ', '.join(user_memory.get("jobs", [])) or "unbekannt"
-    traits = ', '.join(user_memory.get("traits", [])) or "nicht definiert"
+    # 🧠 Memory aus Supabase, gefiltert nach Score
+    facts = ', '.join(extract_memory(user_memory.get("facts", []))) or "nichts bekannt"
+    likes = ', '.join(extract_memory(user_memory.get("likes", []))) or "nichts"
+    jobs = ', '.join(extract_memory(user_memory.get("jobs", []))) or "unbekannt"
+    traits = ', '.join(extract_memory(user_memory.get("traits", []))) or "nicht definiert"
 
     memory_context = f"""
 🧠 Bekannte Infos über den User:

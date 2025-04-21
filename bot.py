@@ -4,10 +4,10 @@ import time
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from logic.prompts import PROMPT
+from logic.prompts import build_prompt_with_memory
 from logic.triggers import has_trigger
 from logic.context_handler import is_followup, update_context
-from logic.memory_store import init_user_memory, save_user_memory
+from logic.memory_store import init_user_memory, save_user_memory, get_user_memory
 from logic.chat_log import log_chat
 from logic.embedding_store import store_embedding, query_similar_messages
 
@@ -22,7 +22,7 @@ client = discord.Client(intents=intents)
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 active_conversations = {}
-CONVO_TIMEOUT = 600  # 10 Min Timeout für Follow-ups
+CONVO_TIMEOUT = 600  # 10 Min Timeout
 
 @client.event
 async def on_ready():
@@ -41,7 +41,7 @@ async def on_message(message):
     # User initialisieren
     init_user_memory(user_id, username)
 
-    # User-Memory speichern anhand typischer Phrasen
+    # Inhalte in Memory speichern
     if "ich liebe" in lowered or "ich mag" in lowered:
         like = lowered.split("ich liebe")[-1].strip() if "ich liebe" in lowered else lowered.split("ich mag")[-1].strip()
         save_user_memory(user_id, username, like=like)
@@ -58,7 +58,7 @@ async def on_message(message):
         trait = lowered.split("ich bin")[-1].strip()
         save_user_memory(user_id, username, trait=trait)
 
-    # Kontext bestimmen
+    # Kontext erkennen
     now = time.time()
     is_active, last_time = active_conversations.get(user_id, (False, 0))
     timed_out = now - last_time > CONVO_TIMEOUT
@@ -72,11 +72,15 @@ async def on_message(message):
         active_conversations[user_id] = (True, now)
 
         try:
-            # Ähnliche Kontexte laden (Vektor-Suche)
+            # USER MEMORY LADEN
+            user_memory = get_user_memory(user_id)
+            prompt = build_prompt_with_memory(user_memory)
+
+            # Ähnliche Nachrichten holen (Embedding)
             similar = query_similar_messages(user_id, content)
 
             # GPT-Kontext aufbauen
-            messages = [{"role": "system", "content": PROMPT}]
+            messages = [{"role": "system", "content": prompt}]
             messages += [{"role": "user", "content": m["message"]} for m in similar]
             messages.append({"role": "user", "content": content})
 
@@ -88,12 +92,14 @@ async def on_message(message):
             reply = response.choices[0].message.content
             await message.channel.send(reply)
 
-            # Kontext, Verlauf und Embedding speichern
+            # Kontext speichern
             update_context(user_id)
+
+            # Logging & Embedding speichern
             log_chat(user_id, username, content, reply, model_used="gpt-4")
             store_embedding(user_id, username, content)
 
         except Exception as e:
-            await message.channel.send(f"Ich bin verwirrt. Wie du. ({e})")
+            await message.channel.send(f"Ich bin überfordert. Wie du. ({e})")
 
 client.run(DISCORD_TOKEN)

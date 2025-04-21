@@ -10,6 +10,7 @@ from logic.context_handler import is_followup, update_context
 from logic.memory_store import init_user_memory, save_user_memory, get_user_memory
 from logic.chat_log import log_chat
 from logic.embedding_store import store_embedding, query_similar_messages
+from logic.relevance_memory import should_respond
 
 load_dotenv()
 
@@ -22,7 +23,7 @@ client = discord.Client(intents=intents)
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 active_conversations = {}
-CONVO_TIMEOUT = 600  # 10 Min Timeout
+CONVO_TIMEOUT = 600
 
 @client.event
 async def on_ready():
@@ -38,10 +39,8 @@ async def on_message(message):
     content = message.content.strip()
     lowered = content.lower()
 
-    # User initialisieren
     init_user_memory(user_id, username)
 
-    # Inhalte in Memory speichern
     if "ich liebe" in lowered or "ich mag" in lowered:
         like = lowered.split("ich liebe")[-1].strip() if "ich liebe" in lowered else lowered.split("ich mag")[-1].strip()
         save_user_memory(user_id, username, like=like)
@@ -58,48 +57,41 @@ async def on_message(message):
         trait = lowered.split("ich bin")[-1].strip()
         save_user_memory(user_id, username, trait=trait)
 
-    # Kontext erkennen
     now = time.time()
     is_active, last_time = active_conversations.get(user_id, (False, 0))
     timed_out = now - last_time > CONVO_TIMEOUT
-    mentioned = client.user.mentioned_in(message) or "monday" in lowered
 
-    should_respond = (
-        mentioned or has_trigger(lowered) or is_followup(user_id, lowered) or (is_active and not timed_out)
-    )
+    # Relevanz prüfen anhand Gesprächsverlauf
+    history = [m async for m in message.channel.history(limit=10)]
+    history = list(reversed(history))
 
-    if should_respond:
-        active_conversations[user_id] = (True, now)
+    if not should_respond(message, history, client.user.id, botname="monday"):
+        return
 
-        try:
-            # USER MEMORY LADEN
-            user_memory = get_user_memory(user_id)
-            prompt = build_prompt_with_memory(user_memory)
+    active_conversations[user_id] = (True, now)
 
-            # Ähnliche Nachrichten holen (Embedding)
-            similar = query_similar_messages(user_id, content)
+    try:
+        user_memory = get_user_memory(user_id)
+        prompt = build_prompt_with_memory(user_memory)
 
-            # GPT-Kontext aufbauen
-            messages = [{"role": "system", "content": prompt}]
-            messages += [{"role": "user", "content": m["message"]} for m in similar]
-            messages.append({"role": "user", "content": content})
+        similar = query_similar_messages(user_id, content)
 
-            # GPT antworten lassen
-            response = openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=messages
-            )
-            reply = response.choices[0].message.content
-            await message.channel.send(reply)
+        messages = [{"role": "system", "content": prompt}]
+        messages += [{"role": "user", "content": m["message"]} for m in similar]
+        messages.append({"role": "user", "content": content})
 
-            # Kontext speichern
-            update_context(user_id)
+        response = openai_client.chat.completions.create(
+            model="gpt-4",
+            messages=messages
+        )
+        reply = response.choices[0].message.content
+        await message.channel.send(reply)
 
-            # Logging & Embedding speichern
-            log_chat(user_id, username, content, reply, model_used="gpt-4")
-            store_embedding(user_id, username, content)
+        update_context(user_id)
+        log_chat(user_id, username, content, reply, model_used="gpt-4")
+        store_embedding(user_id, username, content)
 
-        except Exception as e:
-            await message.channel.send(f"Ich bin überfordert. Wie du. ({e})")
+    except Exception as e:
+        await message.channel.send(f"Ich bin überfordert. Wie du. ({e})")
 
 client.run(DISCORD_TOKEN)

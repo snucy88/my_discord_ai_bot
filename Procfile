@@ -1,1 +1,1 @@
-etzui
+python bot.py

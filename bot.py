@@ -48,7 +48,7 @@ async def on_message(message):
     history = [m async for m in message.channel.history(limit=10)]
     history = list(reversed(history))
 
-    if not should_respond(message, history, client.user.id, botname="monday"):
+    if not await should_respond(message, history, client.user.id, botname="monday"):
         return
 
     active_conversations[user_id] = (True, now)
